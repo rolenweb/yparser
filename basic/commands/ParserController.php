@@ -65,7 +65,10 @@ class ParserController extends BaseCommand
 
             if (empty($state)) {
                 $this->error('The state is not found');
-                $position->next;
+                if (empty($position->next)) {
+                    $this->error('The city is finished');
+                    die;
+                }
                 continue;
             }
 
@@ -89,7 +92,10 @@ class ParserController extends BaseCommand
 
             if (empty($result['data'])) {
                 $this->error('The result is null: city ID - '.$city->id);
-                $position->next;
+                if (empty($position->next)) {
+                    $this->error('The city is finished');
+                    die;
+                }
                 continue;
             }
 
@@ -108,7 +114,10 @@ class ParserController extends BaseCommand
                     }       
                 }
             }
-            $position->next;
+            if (empty($position->next)) {
+                $this->error('The city is finished');
+                die;
+            }
             
             $finish = time();
             $dif = $finish-$start;
