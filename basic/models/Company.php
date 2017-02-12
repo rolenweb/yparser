@@ -82,4 +82,9 @@ class Company extends \yii\db\ActiveRecord
     {
         return $this->hasOne(Keyword::className(), ['id' => 'keyword_id']);
     }
+
+    public function getGeo()
+    {
+        return $this->hasMany(CompanyGeo::className(), ['company_id' => 'id'])->inverseOf('company');
+    }
 }
