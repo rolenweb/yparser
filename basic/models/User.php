@@ -102,6 +102,6 @@ class User extends \yii\base\Object implements \yii\web\IdentityInterface
 
     public function allowIps()
     {
-        return ['127.0.0.1','82.208.100.183','93.120.195.167'];
+        return ['127.0.0.1','82.208.100.183','93.120.195.167','82.208.100.151'];
     }
 }
