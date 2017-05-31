@@ -9,13 +9,24 @@ namespace app\commands;
 
 use yii\console\Controller;
 use yii\helpers\Console;
+use yii\helpers\ArrayHelper;
+use yii\base\Exception;
 
 use app\models\Position;
-use app\models\City;
-use app\models\Company;
-use app\models\Yp;
+use app\models\Yp2;
 
-use app\commands\tools\CurlClient;
+//pizza
+use app\models\pizza\City;
+use app\models\pizza\State;
+use app\models\pizza\Company;
+use app\models\pizza\CompanyHours;
+use app\models\pizza\CompanyCategory;
+use app\models\pizza\CompanyExtraPhones;
+use app\models\pizza\CompanyPaymentMethod;
+use app\models\pizza\CompanyWeblink;
+use app\models\pizza\CompanyOtherInfo;
+//pizza
+
 
 /**
  * This command echoes the first argument that you have entered.
@@ -33,8 +44,9 @@ class ParserController extends BaseCommand
      */
     public function actionIndex()
     {
-        $yp = new Yp();
-    	for (;;) { 
+        $yp = new Yp2();
+
+    	for ($iter = 0;$iter < 1000; $iter++) { 
 
     		$start = time();
 
@@ -60,6 +72,7 @@ class ParserController extends BaseCommand
                 $this->error('The city is not found');
                 return;
             }
+            $this->whisper('Select city: '.$city->name);
 
             $state = $city->state;
 
@@ -71,50 +84,170 @@ class ParserController extends BaseCommand
                 }
                 continue;
             }
+            $this->whisper('Select state: '.$state->code);
 
-            $this->whisper('Select city: '.$city->name.', '.$state->code);
+            $yp->setDefault();
+            $yp->setCity($city->name);
+            $yp->setState($state->code);
+            $yp->setQuery($keyword->key);
 
-            $parameters = [
-                'city' => $city->name,
-                'state_code' => $city->state->code,
-                'keyword' => $keyword->key
-            ];
-            
-            $yp->loadParameters($parameters);
-            if (!$yp->validate()) {
-                foreach ($yp->getErrors() as $er) {
-                    $this->error($er[0]);
-                    return;
+            try {
+                $yp->parseLinks();
+                $i = 0;
+                $total = count($yp->linksFirm);
+                $this->whisper('Parse: '.$total);
+                Console::startProgress($i, $total);
+                foreach ($yp->linksFirm as $n => $link) {
+                    Console::updateProgress(++$i, $total);
+                    $firmData = $yp->parseFirm($link['url']);
+                    $company = new Company();
+                    $company->ypid = ArrayHelper::getValue($firmData,'ypid');
+                    $company->title = ArrayHelper::getValue($firmData,'title');
+                    $company->address = ArrayHelper::getValue($firmData,'address');
+                    $company->phone = ArrayHelper::getValue($firmData,'phone');
+                    $company->lat = ArrayHelper::getValue($firmData,'geo.lat');
+                    $company->lon = ArrayHelper::getValue($firmData,'geo.lon');
+
+                    if ($firmData['city'] == $city->name) {
+                        $company->city_id = $city->id;
+                    }else{
+                        $state = State::findOne(['code' => $firmData['state']]);
+                        if (empty($state)) {
+                            $this->error($firmData['state'].' state is not found');
+                            continue;
+                        }
+                        $otherCity = City::find()
+                            ->joinWith(['state'])
+                            ->where(
+                                [
+                                    'and',
+                                        [
+                                            'city.name' => $firmData['city']
+                                        ],
+                                        [
+                                            'state.code' => $firmData['state']
+                                        ]
+                                ]
+                            )->limit(1)->one();
+                        if (empty($otherCity) === false) {
+                            $company->city_id = $otherCity->id;  
+                            $this->whisper('Other city: '.$firmData['city'].' is linked');  
+                        }else{
+                            $newCity = new City();
+                            $newCity->name = $firmData['city'];
+                            $newCity->state_id = $state->id;
+                            $newCity->lat  = $company->lat;
+                            $newCity->lon  = $company->lon;
+                            if (!$newCity->save()) {
+                                foreach ($newCity->errors as $error) {
+                                    $this->error($error[0]);
+                                }
+                                continue;
+                            }
+                            $this->whisper('New city: '.$firmData['city'].' is saved');
+                            $company->city_id = $newCity->id;    
+                        }
+                    }
+                    if (!$company->save()) {
+                        foreach ($company->errors as $error) {
+                            $this->error($error[0]);
+                        }
+                        continue;
+                    }
+
+                    if (empty($firmData['hours']) === false) {
+                        foreach ($firmData['hours'] as $type => $days) {
+                            if (empty($days)) {
+                                continue;
+                            }
+                            foreach ($days as $nDay => $value) {
+                                $companyHours = new CompanyHours();
+                                $companyHours->company_id = $company->id;
+                                $companyHours->type = $type;
+                                $companyHours->day = $nDay;
+                                $companyHours->start = ArrayHelper::getValue($value,'start');
+                                $companyHours->end = ArrayHelper::getValue($value,'end');
+                                if (!$companyHours->save()) {
+                                    foreach ($companyHours->errors as $error) {
+                                        $this->error($error[0]);
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    if (empty($firmData['extra_phones']) === false) {
+                        foreach ($firmData['extra_phones'] as $phone) {
+                            $extraPhones = new CompanyExtraPhones();
+                            $extraPhones->company_id = $company->id;
+                            $extraPhones->phone = $phone;
+                            if (!$extraPhones->save()) {
+                                foreach ($extraPhones->errors as $error) {
+                                    $this->error($error[0]);
+                                }
+                            }
+                        }
+                    }
+
+                    if (empty($firmData['payment_method']) === false) {
+                        foreach ($firmData['payment_method'] as $method) {
+                            $paymentMethod = new CompanyPaymentMethod();
+                            $paymentMethod->company_id = $company->id;
+                            $paymentMethod->method = $method;
+                            if (!$paymentMethod->save()) {
+                                foreach ($paymentMethod->errors as $error) {
+                                    $this->error($error[0]);
+                                }
+                            }
+                        }
+                    }
+
+                    if (empty($firmData['weblinks']) === false) {
+                        foreach ($firmData['weblinks'] as $link) {
+                            $weblinks = new CompanyWeblink();
+                            $weblinks->company_id = $company->id;
+                            $weblinks->link = $link;
+                            if (!$weblinks->save()) {
+                                foreach ($weblinks->errors as $error) {
+                                    $this->error($error[0]);
+                                }
+                            }
+                        }
+                    }
+
+                    if (empty($firmData['categories']) === false) {
+                        foreach ($firmData['categories'] as $category) {
+                            $newCategory = new CompanyCategory();
+                            $newCategory->company_id = $company->id;
+                            $newCategory->title = $category;
+                            if (!$newCategory->save()) {
+                                foreach ($newCategory->errors as $error) {
+                                    $this->error($error[0]);
+                                }
+                            }
+                        }
+                    }
+
+                    if (empty($firmData['other_info']) === false) {
+                        foreach ($firmData['other_info'] as $info) {
+                            $newInfo = new CompanyOtherInfo();
+                            $newInfo->company_id = $company->id;
+                            $newInfo->info = $info;
+                            if (!$newInfo->save()) {
+                                foreach ($newInfo->errors as $error) {
+                                    $this->error($error[0]);
+                                }
+                            }
+                        }
+                    }
                 }
+                Console::endProgress();
+                
+            } catch (Exception $e) {
+                $this->error($e->getMessage());
             }
-            
-            $result = $yp->parse();
-
-            if (empty($result['data'])) {
-                $this->error('The result is null: city ID - '.$city->id);
-                if (empty($position->next)) {
-                    $this->error('The city is finished');
-                    die;
-                }
-                continue;
-            }
-
-            $this->whisper('Found '.count($result['data']). ' companies');
-
-            foreach ($result['data'] as $item) {
-                $company = new Company();
-                $company->city_id = $city->id;
-                $company->keyword_id = $keyword->id;
-                $company->attributes = $item;
-                if ($company->save()) {
-                    # code...
-                }else{
-                    foreach ($company->getErrors() as $er) {
-                        $this->error($er[0]);
-                    }       
-                }
-            }
-            if (empty($position->next)) {
+            $next = $position->next;
+            if (empty($next)) {
                 $this->error('The city is finished');
                 die;
             }
@@ -129,6 +262,32 @@ class ParserController extends BaseCommand
             //Console::clearScreen();
     	}
         
+    }
+
+    public function actionStart()
+    {
+        $yp = new Yp2();
+        $yp->setDefault();
+        $yp->setCity('New York');
+        $yp->setState('NY');
+        $yp->setQuery('pizza');
+
+        try {
+            //$yp->parseLinks();
+            //$this->whisper('Parse: '.count($yp->linksFirm));
+            $yp->linksFirm[] = [
+                'url' => 'https://www.yellowpages.com/new-york-ny/mip/don-antonio-restaurant-470635766?lid=470635766'
+            ];
+            foreach ($yp->linksFirm as $n => $link) {
+                $firmData = $yp->parseFirm($link['url']);
+
+                var_dump($firmData);
+                die;
+            }
+            
+        } catch (Exception $e) {
+            $this->error($e->getMessage());
+        }
     }
 
 }

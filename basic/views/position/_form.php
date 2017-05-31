@@ -18,6 +18,8 @@ use app\models\Keyword;
 
     <?= $form->field($model, 'city_id')->textInput() ?>
 
+    <?= $form->field($model, 'model_city')->textInput() ?>
+
     <?= $form->field($model, 'status')->dropDownList($model::ddStatus()) ?>
 
     

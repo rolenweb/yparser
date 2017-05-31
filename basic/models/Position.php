@@ -33,7 +33,8 @@ class Position extends \yii\db\ActiveRecord
             [['keyword_id', 'city_id', 'status', 'created_at', 'updated_at'], 'integer'],
             [['keyword_id', 'city_id'], 'required'],
             ['status', 'default', 'value' => 1],
-            ['keyword_id', 'unique']
+            ['keyword_id', 'unique'],
+            [['model_city'],'string']
         ];
     }
 
@@ -93,7 +94,8 @@ class Position extends \yii\db\ActiveRecord
 
     public function getNext()
     {
-        $nextCity = City::find()->where(['>','id',$this->city_id])->limit(1)->one();
+        $model_city = $this->model_city;
+        $nextCity = $model_city::find()->where(['>','id',$this->city_id])->limit(1)->one();
         if (empty($nextCity)) {
             return;
         }
@@ -109,8 +111,10 @@ class Position extends \yii\db\ActiveRecord
 
     public function getProcess()
     {
-        $totalCity = City::find()->count();
-        $usedCity = City::find()->where(['<','id',$this->city_id])->count();
+        $model_city = $this->model_city;
+        $totalCity = $model_city::find()->count();
+
+        $usedCity = $model_city::find()->where(['<','id',$this->city_id])->count();
         $process = (empty($usedCity) === 0) ? 0 : round($usedCity/$totalCity*100);
         return $process;
     }

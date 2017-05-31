@@ -9,6 +9,9 @@ use yii\web\Controller;
 use yii\web\NotFoundHttpException;
 use yii\filters\VerbFilter;
 use yii\filters\AccessControl;
+use yii\data\ActiveDataProvider;
+
+use app\models\pizza\City;
 /**
  * KeywordController implements the CRUD actions for Keyword model.
  */
@@ -66,8 +69,45 @@ class KeywordController extends Controller
      */
     public function actionView($id)
     {
+        $keyword = $this->findModel($id);
+
+        switch ($keyword->key) {
+            case 'pizza':
+                $provider = new ActiveDataProvider([
+                    'query' => City::find()
+                        ->select(['count(company.id) as countCompany','city.id','city.name','city.created_at','city.updated_at'])
+                        ->joinWith(['companies'])
+                        ->where(['is not','company.id',null])
+                        ->groupBy('city.id'),
+                    'pagination' => [
+                        'pageSize' => 20,
+                    ],
+                    'sort' => [
+                        'attributes' => [
+                            'id',
+                            'name' => [
+                                'label' => 'Name',
+                            ],
+                            'countCompany',
+                            'created_at',
+                            'updated_at'
+                        ],
+                        'defaultOrder' => [
+                            'created_at' => SORT_DESC,
+                            
+                        ]
+                    ],
+                ]);
+                break;
+            
+            default:
+                # code...
+                break;
+        }
+
         return $this->render('view', [
-            'model' => $this->findModel($id),
+            'model' => $keyword,
+            'provider' => $provider,
         ]);
     }
 
