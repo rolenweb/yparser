@@ -62,7 +62,8 @@ class Position extends \yii\db\ActiveRecord
 
     public function getCity()
     {
-        return $this->hasOne(City::className(), ['id' => 'city_id']);
+        $model_city = $this->model_city;
+        return $this->hasOne($model_city::className(), ['id' => 'city_id']);
     }
 
     public function getKeyword()
@@ -112,6 +113,7 @@ class Position extends \yii\db\ActiveRecord
     public function getProcess()
     {
         $model_city = $this->model_city;
+
         $totalCity = $model_city::find()->count();
 
         $usedCity = $model_city::find()->where(['<','id',$this->city_id])->count();
