@@ -110,7 +110,8 @@ class User extends \yii\base\Object implements \yii\web\IdentityInterface
             '82.208.101.25',
             '213.177.122.183',
             '109.184.217.70',
-            '89.109.23.203'
+            '89.109.23.203',
+            '82.208.101.91'
         ];
     }
 }
